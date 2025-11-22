@@ -1,5 +1,6 @@
 package project;
 
+//AI USE on line 213 (Prompt: "How to ensure a string contains only characters or a single quote in Java")
 import javax.swing.*;
 import java.awt.*;
 
@@ -16,7 +17,7 @@ public class InventoryGUI extends JFrame {
 
         tabbedPane = new JTabbedPane();
 
-        //Add the two required tabs
+        // Add the two required tabs
         tabbedPane.addTab("Inventory", createInventoryPanel());
         tabbedPane.addTab("Sales", createSalesPanel());
 
@@ -26,7 +27,7 @@ public class InventoryGUI extends JFrame {
     }
 
     private long getNextInventoryNumber(DefaultListModel<Item> model) {
-        long maxNum = 1000; //start number if list is empty
+        long maxNum = 1000; // start number if list is empty
         for (int i = 0; i < model.size(); i++) {
             long num = model.get(i).getInventoryNum();
             if (num > maxNum)
@@ -98,7 +99,7 @@ public class InventoryGUI extends JFrame {
         JLabel lblPrice = new JLabel("Unit Price:");
         JTextField txtPrice = new JTextField();
 
-        JLabel lblExpiry = new JLabel("Expiry Date (Perishable):");
+        JLabel lblExpiry = new JLabel("Expiry Date (Perishable) (YYYY-MM-DD):");
         JTextField txtExpiry = new JTextField();
 
         JLabel lblWarranty = new JLabel("Warranty Days (Non-Perishable):");
@@ -165,48 +166,116 @@ public class InventoryGUI extends JFrame {
 
         //Saving items
         btnSave.addActionListener(e -> {
-            Item item = itemList.getSelectedValue();
-            if (item == null) {
+            Item selectedItem = itemList.getSelectedValue();
+            if (selectedItem == null) {
                 JOptionPane.showMessageDialog(panel, "No item selected!");
                 return;
             }
 
-            try {
-                item.setName(txtName.getText());
-                item.setMinimumStock(Integer.parseInt(txtMinStock.getText()));
-                item.setUnitPrice(Double.parseDouble(txtPrice.getText()));
+            String name = txtName.getText().trim();
+            String minStr = txtMinStock.getText().trim();
+            String priceStr = txtPrice.getText().trim();
+            String expiryStr = txtExpiry.getText().trim();
+            String warrantyStr = txtWarranty.getText().trim();
 
-                if (item instanceof PerishableItem p) {
-                    p.setExpirDate(java.time.LocalDate.parse(txtExpiry.getText()));
-                } else if (item instanceof NonPerishableItem np) {
-                    np.setWarrantyPeriod(Integer.parseInt(txtWarranty.getText()));
+            //Validate Name
+            if (name.isEmpty() || !name.matches("^[a-zA-Z\\s']+$")) {
+                JOptionPane.showMessageDialog(panel, "Name must contain only letters, spaces, or apostrophes.");
+                return;
+            }
+
+            //Validate Minimum Stock
+            int minStock;
+            try {
+                minStock = Integer.parseInt(minStr);
+                if (minStock <= 0) throw new Exception("Minimum stock must be greater than 0.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(panel, "Invalid Minimum Stock: " + ex.getMessage());
+                return;
+            }
+
+            //Validate Unit Price
+            double price;
+            try {
+                price = Double.parseDouble(priceStr);
+                if (price <= 0) throw new Exception("Unit price must be greater than 0.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(panel, "Invalid Unit Price: " + ex.getMessage());
+                return;
+            }
+
+            long invNum = selectedItem.getInventoryNum();
+            int amtInStock = selectedItem.getAmtInStock(); // Preserve current stock
+
+            //Detect type change
+            boolean wantsPerishable = rbtnPerishable.isSelected();
+            boolean wantsNonPerishable = rbtnNonPerishable.isSelected();
+
+            if (!wantsPerishable && !wantsNonPerishable) {
+                JOptionPane.showMessageDialog(panel, "Please select Perishable or Non-Perishable.");
+                return;
+            }
+
+            //Handle Perishable
+            if (wantsPerishable) {
+                java.time.LocalDate expiry;
+                try {
+                    expiry = java.time.LocalDate.parse(expiryStr);
+                    if (!expiry.isAfter(java.time.LocalDate.now())) {
+                        JOptionPane.showMessageDialog(panel, "Expiry date must be after today.");
+                        return;
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid Expiry Date. Use YYYY-MM-DD.");
+                    return;
                 }
 
-                itemList.repaint();
-                JOptionPane.showMessageDialog(panel, "Item updated successfully!");
+                Item updatedItem = new PerishableItem(invNum, name, amtInStock, price, minStock, expiry);
 
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(panel, "Invalid input: " + ex.getMessage());
+                //Replace in list
+                int index = itemList.getSelectedIndex();
+                itemListModel.set(index, updatedItem);
+                itemList.setSelectedIndex(index);
+
+                
+            } else { 
+                //Non-Perishable
+                int warranty;
+                try {
+                    warranty = Integer.parseInt(warrantyStr);
+                    if (warranty <= 0) throw new Exception("Warranty must be greater than 0.");
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid Warranty: " + ex.getMessage());
+                    return;
+                }
+
+                Item updatedItem = new NonPerishableItem(invNum, name, amtInStock, price, minStock, warranty);
+
+                //Replace in list
+                int index = itemList.getSelectedIndex();
+                itemListModel.set(index, updatedItem);
+                itemList.setSelectedIndex(index);
             }
+
+            JOptionPane.showMessageDialog(panel, "Item updated successfully!");
         });
 
-        //Add to inventory / Clear for new item
+
+        //Add to inventory/Clear for new item
         btnAddItem.addActionListener(e -> {
 
-            //FIRST CLICK — ENABLE ENTRY MODE
+            //FIRST CLICK —ENABLE ENTRY MODE
             if (!isNewItem) {
                 isNewItem = true;
 
-                //Clear fields for new item
                 txtInvNum.setText("");
                 txtName.setText("");
-                txtStock.setText("");
+                txtStock.setText("0");
                 txtMinStock.setText("");
                 txtPrice.setText("");
                 txtExpiry.setText("");
                 txtWarranty.setText("");
 
-                //Make fields editable for NEW item creation
                 txtInvNum.setEditable(true);
                 txtStock.setEditable(true);
 
@@ -214,83 +283,150 @@ public class InventoryGUI extends JFrame {
                 return;
             }
 
-            //SECOND CLICK — VALIDATE AND SAVE ITEM
-            if (txtInvNum.getText().trim().isEmpty() ||
-                    txtName.getText().trim().isEmpty() ||
-                    txtMinStock.getText().trim().isEmpty() ||
-                    txtPrice.getText().trim().isEmpty() ||
-                    txtStock.getText().trim().isEmpty()) {
+            //SECOND CLICK —VALIDATE AND SAVE ITEM
+            String invStr = txtInvNum.getText().trim();
+            String name = txtName.getText().trim();
+            String stockStr = txtStock.getText().trim();
+            String minStr = txtMinStock.getText().trim();
+            String priceStr = txtPrice.getText().trim();
 
-                JOptionPane.showMessageDialog(panel, "Please fill in all required fields.");
-                return;
-            }
-
-            if (!rbtnPerishable.isSelected() && !rbtnNonPerishable.isSelected()) {
-                JOptionPane.showMessageDialog(panel, "Please select Perishable or Non-Perishable.");
-                return;
-            }
-
-            if (rbtnPerishable.isSelected() && txtExpiry.getText().trim().isEmpty()) {
-                JOptionPane.showMessageDialog(panel, "Expiry date is required for perishable items.");
-                return;
-            }
-
-            if (rbtnNonPerishable.isSelected() && txtWarranty.getText().trim().isEmpty()) {
-                JOptionPane.showMessageDialog(panel, "Warranty days are required for non-perishable items.");
-                return;
-            }
-
+            //Validate Inventory Number
+            long invNum;
             try {
-                long inv = Long.parseLong(txtInvNum.getText().trim());
-                int stock = Integer.parseInt(txtStock.getText().trim());
-                int min = Integer.parseInt(txtMinStock.getText().trim());
-                double price = Double.parseDouble(txtPrice.getText().trim());
-                String name = txtName.getText().trim();
-
-                //Check duplicates
-                for (int i = 0; i < itemListModel.size(); i++) {
-                    Item test = itemListModel.get(i);
-                    if (test.getInventoryNum() == inv) {
-                        JOptionPane.showMessageDialog(panel, "Inventory number already exists!");
-                        return;
-                    }
-                    if (test.getName().equalsIgnoreCase(name)) {
-                        JOptionPane.showMessageDialog(panel, "Name already exists!");
-                        return;
-                    }
-                }
-
-                Item newItem;
-
-                if (rbtnPerishable.isSelected()) {
-                    java.time.LocalDate exp = java.time.LocalDate.parse(txtExpiry.getText().trim());
-                    newItem = new PerishableItem(inv, name, stock, price, min, exp);
-                } else {
-                    int warranty = Integer.parseInt(txtWarranty.getText().trim());
-                    newItem = new NonPerishableItem(inv, name, stock, price, min, warranty);
-                }
-
-                itemListModel.addElement(newItem);
-
-                JOptionPane.showMessageDialog(panel, "Item added successfully!");
-
-            
-                isNewItem = false;
-                txtInvNum.setEditable(false);
-                txtStock.setEditable(false);
-
-                //Clear again
-                txtInvNum.setText("");
-                txtName.setText("");
-                txtStock.setText("");
-                txtMinStock.setText("");
-                txtPrice.setText("");
-                txtExpiry.setText("");
-                txtWarranty.setText("");
-
+                invNum = Long.parseLong(invStr);
+                if (invNum <= 0)
+                    throw new Exception("Inventory Number must be greater than 0.");
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(panel, "Invalid input: " + ex.getMessage());
+                JOptionPane.showMessageDialog(panel, "Invalid Inventory Number: " + ex.getMessage());
+                return;
             }
+
+            //alidate Name
+            if (name.isEmpty() || name.matches("\\d+")) {
+                JOptionPane.showMessageDialog(panel, "Name must be a non-numeric string.");
+                return;
+            }
+
+            if (!name.matches("^[a-zA-Z\\s']+$")) {
+                JOptionPane.showMessageDialog(panel, "Name must contain only letters, spaces, or apostrophes.");
+                return;
+            }
+
+            //Validate Amount in Stock
+            int stock;
+            try {
+                stock = Integer.parseInt(stockStr);
+                if (stock < 0)
+                    throw new Exception("Amount in stock must be >= 0.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(panel, "Invalid Amount in Stock: " + ex.getMessage());
+                return;
+            }
+
+            //Validate Minimum Stock
+            int minStock;
+            try {
+                minStock = Integer.parseInt(minStr);
+                if (minStock <= 0)
+                    throw new Exception("Minimum stock must be greater than 0.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(panel, "Invalid Minimum Stock: " + ex.getMessage());
+                return;
+            }
+
+            //Validate Unit Price
+            double price;
+            try {
+                price = Double.parseDouble(priceStr);
+                if (price <= 0)
+                    throw new Exception("Unit price must be greater than 0.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(panel, "Invalid Unit Price: " + ex.getMessage());
+                return;
+            }
+
+            //Validate Item Type selection
+            if (!rbtnPerishable.isSelected() && !rbtnNonPerishable.isSelected()) {
+                JOptionPane.showMessageDialog(panel, "Please select item type.");
+                return;
+            }
+
+            //Validate perishable expiry date
+            java.time.LocalDate expiry = null;
+            if (rbtnPerishable.isSelected()) {
+                try {
+                    expiry = java.time.LocalDate.parse(txtExpiry.getText().trim());
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid Expiry Date. Use YYYY-MM-DD.");
+                    return;
+                }
+            }
+
+            //Validate non-perishable warranty
+            int warranty = 0;
+            if (rbtnNonPerishable.isSelected()) {
+                try {
+                    warranty = Integer.parseInt(txtWarranty.getText().trim());
+                    if (warranty <= 0)
+                        throw new Exception("Warranty must be greater than 0.");
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid Warranty: " + ex.getMessage());
+                    return;
+                }
+            }
+
+            //Date Validation
+            if (rbtnPerishable.isSelected()) {
+                try {
+                    expiry = java.time.LocalDate.parse(txtExpiry.getText().trim());
+
+                    if (!expiry.isAfter(java.time.LocalDate.now())) {
+                        JOptionPane.showMessageDialog(panel, "Expiry date must be after today.");
+                        return;
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid Expiry Date. Use format YYYY-MM-DD.");
+                    return;
+                }
+            }
+
+            //Check duplicates
+            for (int i = 0; i < itemListModel.size(); i++) {
+                Item it = itemListModel.get(i);
+                if (it.getInventoryNum() == invNum) {
+                    JOptionPane.showMessageDialog(panel, "Inventory number already exists!");
+                    return;
+                }
+                if (it.getName().equalsIgnoreCase(name)) {
+                    JOptionPane.showMessageDialog(panel, "Item name already exists!");
+                    return;
+                }
+            }
+
+            //Create item
+            Item newItem;
+            if (rbtnPerishable.isSelected()) {
+                newItem = new PerishableItem(invNum, name, stock, price, minStock, expiry);
+            } else {
+                newItem = new NonPerishableItem(invNum, name, stock, price, minStock, warranty);
+            }
+
+            itemListModel.addElement(newItem);
+            JOptionPane.showMessageDialog(panel, "Item added successfully!");
+
+            //Reset form
+            isNewItem = false;
+            txtInvNum.setEditable(false);
+            txtStock.setEditable(false);
+            txtInvNum.setText("");
+            txtName.setText("");
+            txtStock.setText("");
+            txtMinStock.setText("");
+            txtPrice.setText("");
+            txtExpiry.setText("");
+            txtWarranty.setText("");
+            rbtnPerishable.setSelected(false);
+            rbtnNonPerishable.setSelected(false);
         });
 
         //Add to inventory with dialouge box
@@ -306,8 +442,12 @@ public class InventoryGUI extends JFrame {
                 return;
 
             try {
-                int amount = Integer.parseInt(input);
-                item.setAmtInStock(item.getAmtInStock() + amount);
+                int amt = Integer.parseInt(input);
+                if (amt <= 0) {
+                    JOptionPane.showMessageDialog(panel, "Amount should be greater than 0.");
+                    return;
+                }
+                item.setAmtInStock(item.getAmtInStock() + amt);
                 txtStock.setText(String.valueOf(item.getAmtInStock()));
                 itemList.repaint();
             } catch (NumberFormatException ex) {
@@ -328,16 +468,18 @@ public class InventoryGUI extends JFrame {
                 return;
 
             try {
-                int amount = Integer.parseInt(input);
-                if (amount > item.getAmtInStock()) {
+                int amt = Integer.parseInt(input);
+                if (amt <= 0) {
+                    JOptionPane.showMessageDialog(panel, "Amount should be greater than 0.");
+                    return;
+                }
+                if (amt > item.getAmtInStock()) {
                     JOptionPane.showMessageDialog(panel, "Not enough stock!");
                     return;
                 }
-
-                item.setAmtInStock(item.getAmtInStock() - amount);
+                item.setAmtInStock(item.getAmtInStock() - amt);
                 txtStock.setText(String.valueOf(item.getAmtInStock()));
                 itemList.repaint();
-
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(panel, "Invalid number!");
             }
@@ -355,18 +497,13 @@ public class InventoryGUI extends JFrame {
                 //Clear fields
                 txtInvNum.setText(String.valueOf(getNextInventoryNumber(itemListModel)));
                 txtName.setText("");
-                txtStock.setText("0"); // start stock at 0
+                txtStock.setText("0");
                 txtMinStock.setText("");
                 txtPrice.setText("");
                 txtExpiry.setText("");
                 txtWarranty.setText("");
                 rbtnPerishable.setSelected(false);
                 rbtnNonPerishable.setSelected(false);
-
-                isNewItem = true;
-                JOptionPane.showMessageDialog(panel,
-                        "Enter details for the new item and click Add Item again to save.");
-            }
 
             int confirm = JOptionPane.showConfirmDialog(
                     panel,
@@ -388,7 +525,8 @@ public class InventoryGUI extends JFrame {
                 rbtnPerishable.setSelected(false);
                 rbtnNonPerishable.setSelected(false);
             }
-        });
+        }
+    });
 
         //This is 2 example items used for testing ofc
         itemListModel.addElement(new PerishableItem(1001, "Milk", 25, 12.50, 5, java.time.LocalDate.now().plusDays(5)));
@@ -397,7 +535,7 @@ public class InventoryGUI extends JFrame {
         return panel;
     }
 
-    //SALES
+    // SALES
     private JPanel createSalesPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BorderLayout());
