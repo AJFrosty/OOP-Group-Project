@@ -302,8 +302,8 @@ public class InventoryGUI extends JFrame {
             }
 
             //alidate Name
-            if (name.isEmpty() || name.matches("\\d+")) {
-                JOptionPane.showMessageDialog(panel, "Name must be a non-numeric string.");
+            if (name.isEmpty() || !name.matches("^[a-zA-Z\\s']+$")) {
+                JOptionPane.showMessageDialog(panel, "Name must contain only letters, spaces, or apostrophes.");
                 return;
             }
 
